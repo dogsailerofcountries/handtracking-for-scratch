@@ -18,5 +18,16 @@ Then click on Load Custom Extension
 
 ![Load_custom_extension](/Images/Load_custom_extension.png)
 
+Then input the following url "https://raw.githubusercontent.com/dogsailerofcountries/handtracking-for-scratch/refs/heads/main/Hand-tracking.js"
+(if it doesn't work well click on run unsaboxed, else don't.)
+
+![Url_image](/Images/Url-extension.png)
+
+(Optional) You can add it to your extensions list if you want.
+
+![Add_to_list](/Images/Add_to_list.png)
+
+
+
 
 
