@@ -10,3 +10,6 @@ Why? i was just trying to make an extension with Gemini (which ussualy doesn't t
 
 This is an extension comaptible with either turbowarp and penguinmod.
 
+To install it you will click on "extensions"
+
+
