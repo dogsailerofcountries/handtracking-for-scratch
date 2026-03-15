@@ -27,6 +27,10 @@ Then input the following url "https://raw.githubusercontent.com/dogsailerofcount
 
 ![Add_to_list](/Images/Add_to_list.png)
 
+Now you should see the extension on the sidebar
+
+![Extension_Icon](/Images/Hand_track_Icon.png)
+
 
 
 
