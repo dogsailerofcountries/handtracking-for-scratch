@@ -14,5 +14,9 @@ To install it you will click on "extensions"
 
 ![Extensions_button](/Images/Extensions%20button.png)
 
+Then click on Load Custom Extension
+
+![Load_custom_extension](/Images/Load_custom_extension.png)
+
 
 
