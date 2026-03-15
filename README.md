@@ -12,4 +12,7 @@ This is an extension comaptible with either turbowarp and penguinmod.
 
 To install it you will click on "extensions"
 
+![Extensions_button](Extensions button.png)
+
+
 
