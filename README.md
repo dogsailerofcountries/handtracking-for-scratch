@@ -14,7 +14,7 @@ The repo was done by me and the guide, but the code was done by AI, so this wasn
 
 This is an extension comaptible with either turbowarp and penguinmod.
 
-## Guide for penguin mod
+# Guide for penguin mod
 
 To install it you will click on "extensions"
 
@@ -45,7 +45,7 @@ Now you should see the extension on the sidebar
 
 ![Extension_Icon](/Images/Penguinmod/Hand_track_Icon.png)
 
-## Guide for turbowarp
+# Guide for turbowarp
 
 First go to "https://raw.githubusercontent.com/dogsailerofcountries/handtracking-for-scratch/refs/heads/main/Hand-tracking.js"
 
