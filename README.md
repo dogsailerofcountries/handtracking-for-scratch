@@ -1,11 +1,16 @@
 # handtracking-for-scratch
-This is my first repo
-This an extension for tracking hands for scratch.
+This is my first repo, and I'm just doing it for fun
+This an extension for tracking hands for turbowarp and turbowarp based clients, like penguinmod.
 
 It uses google's mediapipe hand landmark
 
-WARNING -- THES CODE WAS FULLY DONE WITH AI -------------------------------
-(the repo was done by me and the guide but the code was done by an AI, so this wasn't done with openclaw or something similar)
+## Credits to https://yokobond.github.io/xcx-mp-hand/ (a Xcratch extension)
+Thank you for your awesome code, gemini based of your project to create this one.
+
+## WARNING -- THE CODE WAS FULLY DONE BY AI --
+# If you don't have a problem with that, you can proceed
+
+The repo was done by me and the guide, but the code was done by AI, so this wasn't done with openclaw or something similar
 
 This is an extension comaptible with either turbowarp and penguinmod.
 
@@ -72,7 +77,23 @@ The extension should now be available through the sidebar
 + It isn't failureless but should work for most case
 + Sometimes hands can randomly dissapear from the project, recommend doing whatever you do based on the hands coordenates only if it isn't equal to X,0 and Y,0 on that specific hand.
 
-Why? i was just trying to make an extension with Gemini (which ussualy doesn't turn out well) but unlike most times it turned very well, so I decided to share on github.
+## Usage
+I think most block are self explanatory but im going explain 2 of them.
+
++ Detection interval
+It defines how much time will pass before the model scans for your hand
+
+![Detection_interval](/Images/Explanation/Detection_interval_BLock.png)
+
++ ... landmark .... on hand ...
+With this block you can get the position of a part of a hand.
+
+So you can get "x, y, z" of part "wrist" of hand "1-(the amount/limit of hands you set/on stage)"
+
+![Position_block](/Images/Explanation/Position_block.png)
+
+## Why?
+I was just trying to make an extension with Gemini (which ussualy doesn't turn out well) but unlike most times it turned very well, so I decided to share on github.
 
 
 
