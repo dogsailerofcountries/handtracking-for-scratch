@@ -1,4 +1,4 @@
-# handtracking-for-scratch
+# Handtracking-for-scratch
 This is my first repo, and I'm just doing it for fun
 This an extension for tracking hands for turbowarp and turbowarp based clients, like penguinmod.
 
