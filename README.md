@@ -8,7 +8,7 @@ It uses google's mediapipe hand landmark
 Thank you for your awesome code, gemini based of your project to create this one.
 
 ## WARNING -- THE CODE WAS FULLY DONE BY AI --
-# If you don't have a problem with that, you can proceed
+### If you don't have a problem with that, you can proceed
 
 The repo was done by me and the guide, but the code was done by AI, so this wasn't done with openclaw or something similar
 
