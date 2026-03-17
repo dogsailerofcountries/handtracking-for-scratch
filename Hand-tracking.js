@@ -1,257 +1,470 @@
-// Name: MediaPipe Hand Tracking (Optimized)
-// Description: Advanced, high-performance hand detection using Google's MediaPipe.
-// Author: Assistant
+(function (Scratch) {
+    'use strict';
 
-(function(Scratch) {
-  'use strict';
-
-  if (!Scratch.extensions.unsandboxed) {
-    throw new Error('MediaPipe Hand Tracking must be run unsandboxed.');
-  }
-
-  const loadScript = (src) => new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = src;
-    script.crossOrigin = 'anonymous';
-    script.onload = resolve;
-    script.onerror = reject;
-    document.body.appendChild(script);
-  });
-
-  class MediaPipeHandsExt {
-    constructor() {
-      this.hands = null;
-      this.camera = null;
-      this.results = null;
-      
-      this.videoElement = document.createElement('video');
-      this.videoElement.style.display = 'none';
-      this.videoElement.autoplay = true;
-      this.videoElement.playsInline = true;
-      document.body.appendChild(this.videoElement);
-      
-      this.isRunning = false;
-      this.ready = false;
-
-      // Optimizations
-      this.isDetecting = false;     // Lock to drop frames while processing
-      this.intervalTime = 33;       // Default interval (30 FPS AI tracking)
-      this.lastDetectTime = 0;      
-      this.maxHands = 2;            // Processing fewer hands speeds up inference
-      
-      this.initModel();
+    if (!Scratch.extensions.unsandboxed) {
+        throw new Error('MediaPipe Hand Detection must be run unsandboxed.');
     }
 
-    async initModel() {
-      try {
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js');
+    const EXTENSION_ID = 'xcxMPHand';
 
-        this.hands = new window.Hands({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-
-        this.hands.setOptions({
-          maxNumHands: this.maxHands,
-          modelComplexity: 0, // OPTIMIZATION: 0 = Lite Model (Much faster), 1 = Full
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5
-        });
-
-        this.hands.onResults((results) => {
-          this.results = results;
-          this.isDetecting = false; // Release the lock
-        });
-
-        this.camera = new window.Camera(this.videoElement, {
-          onFrame: async () => {
-            if (!this.isRunning || this.videoElement.readyState < 2) return;
+    class MPHandExtension {
+        constructor() {
+            this.handLandmarker = null;
+            this.visionTasks = null;
+            this.detecting = false;
+            this.detectionInterval = null;
+            this.intervalTime = 100;
+            this.numHands = 4;
+            this.modelPath = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
             
-            // OPTIMIZATION: Frame Dropping & Throttling
-            // Do not send a new frame if the model is still processing the old one, 
-            // OR if the interval time hasn't passed.
-            const now = performance.now();
-            if (!this.isDetecting && (now - this.lastDetectTime >= this.intervalTime)) {
-              this.isDetecting = true; // Lock
-              this.lastDetectTime = now;
-              
-              // We don't await this directly to let the camera utility finish its loop instantly
-              this.hands.send({ image: this.videoElement }).catch(e => {
-                console.error('MediaPipe Error:', e);
-                this.isDetecting = false; // Release lock on error
-              });
-            }
-          },
-          // OPTIMIZATION: Lower native video resolution. 
-          // 320x240 is standard for ML vision, 480x360 is unnecessary overhead.
-          width: 320, 
-          height: 240
-        });
+            this.hands = { landmarks: [], handednesses: [], worldLandmarks: [] };
+            
+            this.videoState = 'on';
+            this.videoTransparency = 50;
+            this.cameraDirection = 'mirrored';
 
-        this.ready = true;
-      } catch (e) {
-        console.error("Failed to load MediaPipe:", e);
-      }
-    }
-
-    getInfo() {
-      return {
-        id: 'mediapipehands',
-        name: 'Hand Tracking',
-        color1: '#0F9D58',
-        color2: '#0B8043',
-        blocks: [
-          {
-            opcode: 'isReady',
-            blockType: Scratch.BlockType.BOOLEAN,
-            text: 'is model ready?'
-          },
-          '---',
-          {
-            opcode: 'startTracking',
-            blockType: Scratch.BlockType.COMMAND,
-            text: 'start hand tracking'
-          },
-          {
-            opcode: 'stopTracking',
-            blockType: Scratch.BlockType.COMMAND,
-            text: 'stop hand tracking'
-          },
-          {
-            opcode: 'isTracking',
-            blockType: Scratch.BlockType.BOOLEAN,
-            text: 'is tracking active?'
-          },
-          '---',
-          {
-            opcode: 'setInterval',
-            blockType: Scratch.BlockType.COMMAND,
-            text: 'set detection interval to [MS] ms',
-            arguments: {
-              MS: {
-                type: Scratch.ArgumentType.NUMBER,
-                defaultValue: 33
-              }
-            }
-          },
-          {
-            opcode: 'setMaxHands',
-            blockType: Scratch.BlockType.COMMAND,
-            text: 'set max tracked hands to [HANDS]',
-            arguments: {
-              HANDS: {
-                type: Scratch.ArgumentType.NUMBER,
-                defaultValue: 2
-              }
-            }
-          },
-          '---',
-          {
-            opcode: 'handsDetected',
-            blockType: Scratch.BlockType.REPORTER,
-            text: 'number of hands detected'
-          },
-          {
-            opcode: 'getHandedness',
-            blockType: Scratch.BlockType.REPORTER,
-            text: 'handedness of hand [HAND_INDEX]',
-            arguments: {
-              HAND_INDEX: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 }
-            }
-          },
-          {
-            opcode: 'getLandmark',
-            blockType: Scratch.BlockType.REPORTER,
-            text: '[AXIS] of landmark [LANDMARK] on hand [HAND_INDEX]',
-            arguments: {
-              AXIS: { type: Scratch.ArgumentType.STRING, menu: 'AXIS_MENU', defaultValue: 'x' },
-              LANDMARK: { type: Scratch.ArgumentType.NUMBER, menu: 'LANDMARK_MENU', defaultValue: 8 },
-              HAND_INDEX: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 }
-            }
-          }
-        ],
-        menus: {
-          AXIS_MENU: { acceptReporters: true, items: ['x', 'y', 'z'] },
-          LANDMARK_MENU: {
-            acceptReporters: true,
-            items: [
-              {text: '0 (Wrist)', value: '0'},
-              {text: '4 (Thumb Tip)', value: '4'},
-              {text: '8 (Index Tip)', value: '8'},
-              {text: '12 (Middle Tip)', value: '12'},
-              {text: '16 (Ring Tip)', value: '16'},
-              {text: '20 (Pinky Tip)', value: '20'}
-            ]
-          }
+            this._initPromise = this._initMediaPipe();
         }
-      };
+
+        async _initMediaPipe() {
+            try {
+                const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest');
+                this.FilesetResolver = vision.FilesetResolver;
+                this.HandLandmarker = vision.HandLandmarker;
+
+                this.visionTasks = await this.FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+                );
+
+                await this._createLandmarker();
+            } catch (error) {
+                console.error('Failed to initialize MediaPipe:', error);
+            }
+        }
+
+        async _createLandmarker() {
+            if (!this.HandLandmarker || !this.visionTasks) return;
+            
+            if (this.handLandmarker) {
+                this.handLandmarker.close();
+            }
+
+            this.handLandmarker = await this.HandLandmarker.createFromOptions(this.visionTasks, {
+                baseOptions: {
+                    modelAssetPath: this.modelPath,
+                    delegate: 'GPU'
+                },
+                runningMode: 'VIDEO',
+                numHands: this.numHands
+            });
+        }
+
+        getInfo() {
+            return {
+                id: EXTENSION_ID,
+                name: 'Hand Detection',
+                color1: '#4a90e2',
+                blocks: [
+                    {
+                        opcode: 'startHandDetection',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: 'start hand detection on camera'
+                    },
+                    {
+                        opcode: 'stopHandDetection',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: 'stop hand detection'
+                    },
+                    {
+                        opcode: 'isHandDetecting',
+                        blockType: Scratch.BlockType.BOOLEAN,
+                        text: 'is hand detecting'
+                    },
+                    {
+                        opcode: 'getDetectionIntervalTime',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'hand detection interval time'
+                    },
+                    {
+                        opcode: 'setDetectionIntervalTime',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: 'set hand detection interval time to [TIME] ms',
+                        arguments: {
+                            TIME: { type: Scratch.ArgumentType.NUMBER, defaultValue: 100 }
+                        }
+                    },
+                    {
+                        opcode: 'getNumHands',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'number of hands to detect'
+                    },
+                    {
+                        opcode: 'setNumHands',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: 'set number of hands to detect to [NUM]',
+                        arguments: {
+                            NUM: { type: Scratch.ArgumentType.NUMBER, defaultValue: 4 }
+                        }
+                    },
+                    {
+                        opcode: 'setVideoTransparency',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: 'set video transparency to [TRANSPARENCY]',
+                        arguments: {
+                            TRANSPARENCY: { type: Scratch.ArgumentType.NUMBER, defaultValue: 50 }
+                        }
+                    },
+                    {
+                        opcode: 'setCameraDirection',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: 'set camera [DIRECTION]',
+                        arguments: {
+                            DIRECTION: { type: Scratch.ArgumentType.STRING, menu: 'cameraDirectionMenu' }
+                        }
+                    },
+                    "---",
+                    {
+                        opcode: 'detectHandOnStage',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: 'detect hand on stage'
+                    },
+                    {
+                        opcode: 'detectHandInCostume',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: 'detect hand in costume [COSTUME]',
+                        arguments: {
+                            COSTUME: { type: Scratch.ArgumentType.STRING, defaultValue: 'costume1' }
+                        }
+                    },
+                    "---",
+                    {
+                        opcode: 'numberOfHands',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'number of hands'
+                    },
+                    {
+                        opcode: 'handedness',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'handedness of hand #[HAND_NUMBER]',
+                        arguments: {
+                            HAND_NUMBER: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 }
+                        }
+                    },
+                    {
+                        opcode: 'handLandmarkX',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'x of [LANDMARK] of hand #[HAND_NUMBER]',
+                        arguments: {
+                            HAND_NUMBER: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 },
+                            LANDMARK: { type: Scratch.ArgumentType.STRING, menu: 'LANDMARK' }
+                        }
+                    },
+                    {
+                        opcode: 'handLandmarkY',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'y of [LANDMARK] of hand #[HAND_NUMBER]',
+                        arguments: {
+                            HAND_NUMBER: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 },
+                            LANDMARK: { type: Scratch.ArgumentType.STRING, menu: 'LANDMARK' }
+                        }
+                    },
+                    {
+                        opcode: 'handLandmarkZ',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'z of [LANDMARK] of hand #[HAND_NUMBER]',
+                        arguments: {
+                            HAND_NUMBER: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 },
+                            LANDMARK: { type: Scratch.ArgumentType.STRING, menu: 'LANDMARK' }
+                        }
+                    },
+                    "---",
+                    {
+                        opcode: 'handLandmarkRelativeX',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'relative x of [LANDMARK] of hand #[HAND_NUMBER]',
+                        arguments: {
+                            HAND_NUMBER: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 },
+                            LANDMARK: { type: Scratch.ArgumentType.STRING, menu: 'LANDMARK' }
+                        }
+                    },
+                    {
+                        opcode: 'handLandmarkRelativeY',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'relative y of [LANDMARK] of hand #[HAND_NUMBER]',
+                        arguments: {
+                            HAND_NUMBER: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 },
+                            LANDMARK: { type: Scratch.ArgumentType.STRING, menu: 'LANDMARK' }
+                        }
+                    },
+                    {
+                        opcode: 'handLandmarkRelativeZ',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'relative z of [LANDMARK] of hand #[HAND_NUMBER]',
+                        arguments: {
+                            HAND_NUMBER: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 },
+                            LANDMARK: { type: Scratch.ArgumentType.STRING, menu: 'LANDMARK' }
+                        }
+                    },
+                    "---",
+                    {
+                        opcode: 'setModelPath',
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: 'set model path to [PATH]',
+                        arguments: {
+                            PATH: { type: Scratch.ArgumentType.STRING, defaultValue: this.modelPath }
+                        }
+                    },
+                    {
+                        opcode: 'getModelPath',
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: 'get model path'
+                    }
+                ],
+                menus: {
+                    LANDMARK: {
+                        acceptReporters: true,
+                        items: [
+                            { text: 'wrist(0)', value: '0' },
+                            { text: 'thumb CMC(1)', value: '1' },
+                            { text: 'thumb MCP(2)', value: '2' },
+                            { text: 'thumb IP(3)', value: '3' },
+                            { text: 'thumb tip(4)', value: '4' },
+                            { text: 'index finger MCP(5)', value: '5' },
+                            { text: 'index finger PIP(6)', value: '6' },
+                            { text: 'index finger DIP(7)', value: '7' },
+                            { text: 'index finger tip(8)', value: '8' },
+                            { text: 'middle finger MCP(9)', value: '9' },
+                            { text: 'middle finger PIP(10)', value: '10' },
+                            { text: 'middle finger DIP(11)', value: '11' },
+                            { text: 'middle finger tip(12)', value: '12' },
+                            { text: 'ring finger MCP(13)', value: '13' },
+                            { text: 'ring finger PIP(14)', value: '14' },
+                            { text: 'ring finger DIP(15)', value: '15' },
+                            { text: 'ring finger tip(16)', value: '16' },
+                            { text: 'pinky finger MCP(17)', value: '17' },
+                            { text: 'pinky finger PIP(18)', value: '18' },
+                            { text: 'pinky finger DIP(19)', value: '19' },
+                            { text: 'pinky finger tip(20)', value: '20' }
+                        ]
+                    },
+                    cameraDirectionMenu: {
+                        acceptReporters: false,
+                        items: [
+                            { text: 'mirrored', value: 'mirrored' },
+                            { text: 'flipped', value: 'flipped' }
+                        ]
+                    }
+                }
+            };
+        }
+
+        async startHandDetection() {
+            await this._initPromise;
+            if (this.detecting) return;
+
+            // Turn on video
+            Scratch.vm.runtime.ioDevices.video.enableVideo();
+            Scratch.vm.runtime.ioDevices.video.mirror = (this.cameraDirection === 'mirrored');
+            
+            this.detecting = true;
+            this._runDetectionLoop();
+        }
+
+        stopHandDetection() {
+            this.detecting = false;
+            if (this.detectionInterval) {
+                clearTimeout(this.detectionInterval);
+                this.detectionInterval = null;
+            }
+        }
+
+        isHandDetecting() {
+            return this.detecting;
+        }
+
+        getDetectionIntervalTime() {
+            return this.intervalTime;
+        }
+
+        setDetectionIntervalTime(args) {
+            this.intervalTime = Math.max(0, Scratch.Cast.toNumber(args.TIME));
+        }
+
+        getNumHands() {
+            return this.numHands;
+        }
+
+        async setNumHands(args) {
+            const num = Math.max(1, Scratch.Cast.toNumber(args.NUM));
+            this.numHands = num;
+            await this._createLandmarker();
+        }
+
+        setVideoTransparency(args) {
+            this.videoTransparency = Scratch.Cast.toNumber(args.TRANSPARENCY);
+            Scratch.vm.runtime.ioDevices.video.setPreviewGhost(this.videoTransparency);
+        }
+
+        setCameraDirection(args) {
+            this.cameraDirection = args.DIRECTION;
+            Scratch.vm.runtime.ioDevices.video.mirror = (this.cameraDirection === 'mirrored');
+        }
+
+        async detectHandOnStage() {
+            await this._initPromise;
+            return new Promise((resolve) => {
+                Scratch.vm.renderer.requestSnapshot(async (dataURI) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        this._detectFromImage(img);
+                        resolve();
+                    };
+                    img.src = dataURI;
+                });
+            });
+        }
+
+        async detectHandInCostume(args, util) {
+            await this._initPromise;
+            const target = util.target;
+            const costumeName = Scratch.Cast.toString(args.COSTUME);
+            const costume = target.getCostumes().find(c => c.name === costumeName) || target.getCostumes()[0];
+            
+            if (!costume) return;
+            
+            const dataURI = costume.asset.encodeDataURI();
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    this._detectFromImage(img);
+                    resolve();
+                };
+                img.src = dataURI;
+            });
+        }
+
+        _detectFromImage(imgElement) {
+            if (!this.handLandmarker) return;
+            
+            // For static images, switch to IMAGE mode temporarily if needed, 
+            // but MediaPipe recommends strictly setting mode beforehand.
+            // Using VIDEO mode with timestamp usually works if we provide a synthetic timestamp.
+            const result = this.handLandmarker.detectForVideo(imgElement, performance.now());
+            if (result) {
+                this.hands = result;
+            }
+        }
+
+        async _runDetectionLoop() {
+            if (!this.detecting || !this.handLandmarker) return;
+
+            const videoProvider = Scratch.vm.runtime.ioDevices.video.provider;
+            if (videoProvider && videoProvider.video && videoProvider.video.readyState >= 2) {
+                const result = this.handLandmarker.detectForVideo(videoProvider.video, performance.now());
+                if (result) {
+                    this.hands = result;
+                }
+            }
+
+            this.detectionInterval = setTimeout(() => {
+                this._runDetectionLoop();
+            }, this.intervalTime);
+        }
+
+        numberOfHands() {
+            if (!this.hands || !this.hands.handednesses) return 0;
+            return this.hands.handednesses.length;
+        }
+
+        handedness(args) {
+            const index = Scratch.Cast.toNumber(args.HAND_NUMBER) - 1;
+            if (!this.hands || !this.hands.handednesses || index < 0 || index >= this.hands.handednesses.length) {
+                return '';
+            }
+            return this.hands.handednesses[index][0].categoryName;
+        }
+
+        _getLandmark(handIndex, landmarkIndex) {
+            if (!this.hands || !this.hands.landmarks) return null;
+            const hand = this.hands.landmarks[handIndex];
+            if (!hand) return null;
+            return hand[landmarkIndex] || null;
+        }
+
+        _getWorldLandmark(handIndex, landmarkIndex) {
+            if (!this.hands || !this.hands.worldLandmarks) return null;
+            const hand = this.hands.worldLandmarks[handIndex];
+            if (!hand) return null;
+            return hand[landmarkIndex] || null;
+        }
+
+        handLandmarkX(args) {
+            const handIndex = Scratch.Cast.toNumber(args.HAND_NUMBER) - 1;
+            const landmarkIndex = Scratch.Cast.toNumber(args.LANDMARK);
+            const lm = this._getLandmark(handIndex, landmarkIndex);
+            if (!lm) return 0;
+            // Convert normalized [0, 1] to Scratch coordinates [-240, 240]
+            let x = (lm.x - 0.5) * 480;
+            if (this.cameraDirection === 'mirrored') {
+                x = -x;
+            }
+            return x;
+        }
+
+        handLandmarkY(args) {
+            const handIndex = Scratch.Cast.toNumber(args.HAND_NUMBER) - 1;
+            const landmarkIndex = Scratch.Cast.toNumber(args.LANDMARK);
+            const lm = this._getLandmark(handIndex, landmarkIndex);
+            if (!lm) return 0;
+            // Convert normalized [0, 1] to Scratch coordinates [-180, 180], inverted Y
+            return -(lm.y - 0.5) * 360;
+        }
+
+        handLandmarkZ(args) {
+            const handIndex = Scratch.Cast.toNumber(args.HAND_NUMBER) - 1;
+            const landmarkIndex = Scratch.Cast.toNumber(args.LANDMARK);
+            const lm = this._getLandmark(handIndex, landmarkIndex);
+            if (!lm) return 0;
+            return lm.z * 480; 
+        }
+
+        handLandmarkRelativeX(args) {
+            const handIndex = Scratch.Cast.toNumber(args.HAND_NUMBER) - 1;
+            const landmarkIndex = Scratch.Cast.toNumber(args.LANDMARK);
+            const lm = this._getWorldLandmark(handIndex, landmarkIndex);
+            if (!lm) return 0;
+            return lm.x;
+        }
+
+        handLandmarkRelativeY(args) {
+            const handIndex = Scratch.Cast.toNumber(args.HAND_NUMBER) - 1;
+            const landmarkIndex = Scratch.Cast.toNumber(args.LANDMARK);
+            const lm = this._getWorldLandmark(handIndex, landmarkIndex);
+            if (!lm) return 0;
+            // Invert Y for Scratch standard
+            return -lm.y;
+        }
+
+        handLandmarkRelativeZ(args) {
+            const handIndex = Scratch.Cast.toNumber(args.HAND_NUMBER) - 1;
+            const landmarkIndex = Scratch.Cast.toNumber(args.LANDMARK);
+            const lm = this._getWorldLandmark(handIndex, landmarkIndex);
+            if (!lm) return 0;
+            return lm.z;
+        }
+
+        async setModelPath(args) {
+            const newPath = Scratch.Cast.toString(args.PATH).trim();
+            if (newPath && newPath !== this.modelPath) {
+                this.modelPath = newPath;
+                await this._createLandmarker();
+            }
+        }
+
+        getModelPath() {
+            return this.modelPath;
+        }
     }
 
-    isReady() { return this.ready; }
-    isTracking() { return this.isRunning; }
-
-    startTracking() {
-      if (!this.ready) return;
-      this.isRunning = true;
-      this.camera.start();
-    }
-
-    stopTracking() {
-      if (!this.ready) return;
-      this.isRunning = false;
-      this.camera.stop();
-      this.results = null;
-      this.isDetecting = false;
-    }
-    
-    setInterval(args) {
-      this.intervalTime = Math.max(0, Scratch.Cast.toNumber(args.MS));
-    }
-
-    setMaxHands(args) {
-      let hands = Math.max(1, Math.min(4, Scratch.Cast.toNumber(args.HANDS)));
-      this.maxHands = hands;
-      if (this.hands) {
-        this.hands.setOptions({ maxNumHands: this.maxHands });
-      }
-    }
-
-    handsDetected() {
-      if (!this.results || !this.results.multiHandLandmarks) return 0;
-      return this.results.multiHandLandmarks.length;
-    }
-
-    getHandedness(args) {
-      if (!this.results || !this.results.multiHandedness) return '';
-      const index = Math.max(1, Math.floor(args.HAND_INDEX)) - 1;
-      if (index >= this.results.multiHandedness.length) return '';
-      return this.results.multiHandedness[index].label;
-    }
-
-    getLandmark(args) {
-      if (!this.results || !this.results.multiHandLandmarks) return 0;
-      
-      const index = Math.max(1, Math.floor(args.HAND_INDEX)) - 1;
-      const landmark = Math.max(0, Math.min(20, Math.floor(args.LANDMARK)));
-      const axis = String(args.AXIS).toLowerCase();
-      
-      if (index >= this.results.multiHandLandmarks.length) return 0;
-      
-      const lm = this.results.multiHandLandmarks[index][landmark];
-      if (!lm) return 0;
-
-      // Convert MediaPipe Coordinates to Scratch Stage Coordinates (-240 to 240, -180 to 180)
-      if (axis === 'x') return (0.5 - lm.x) * 480; 
-      if (axis === 'y') return (0.5 - lm.y) * 360;
-      if (axis === 'z') return lm.z * 100; 
-      
-      return 0;
-    }
-  }
-
-  Scratch.extensions.register(new MediaPipeHandsExt());
+    Scratch.extensions.register(new MPHandExtension());
 })(Scratch);
